@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <unistd.h>
 
 #include "block.h"
 #include "cli.h"
@@ -55,8 +56,7 @@ static int execute_blocks(block *const blocks,
 }
 
 static int trigger_event(block *const blocks, const unsigned short block_count,
-                         timer *const timer) {
-    if (execute_blocks(blocks, block_count, timer) != 0) {
+                         timer *const timer) { if (execute_blocks(blocks, block_count, timer) != 0) {
         return 1;
     }
 
@@ -76,10 +76,17 @@ static int refresh_callback(block *const blocks,
     return 0;
 }
 
+static int reload_self(const char *const argv[]) {
+    char *const *const exec_argv = (char *const *const)argv;
+    execvp(argv[0], exec_argv);
+    return 1;
+}
+
 static int event_loop(block *const blocks, const unsigned short block_count,
                       const bool is_debug_mode,
                       x11_connection *const connection,
-                      signal_handler *const signal_handler) {
+                      signal_handler *const signal_handler,
+                      const char *const argv[]) {
     timer timer = timer_new(blocks, block_count);
 
     // Kickstart the event loop with an initial execution.
@@ -100,7 +107,14 @@ static int event_loop(block *const blocks, const unsigned short block_count,
         }
 
         if (watcher.got_signal) {
-            is_alive = signal_handler_process(signal_handler, &timer) == 0;
+            int action = signal_handler_process(signal_handler, &timer);
+            if (action == 2) {
+                if (reload_self(argv) != 0) {
+                    return 1;
+                }
+                return 0;
+            }
+            is_alive = action == 0;
         }
 
         for (unsigned short i = 0; i < watcher.active_block_count; ++i) {
@@ -148,7 +162,7 @@ int main(const int argc, const char *const argv[]) {
     }
 
     if (event_loop(blocks, block_count, cli_args.is_debug_mode, connection,
-                   &signal_handler) != 0) {
+                   &signal_handler, argv) != 0) {
         status = 1;
     }
 

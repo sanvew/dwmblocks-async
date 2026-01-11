@@ -7,6 +7,7 @@
 #include "util.h"
 
 #define REFRESH_SIGNAL SIGUSR1
+#define RELOAD_SIGNAL SIGHUP
 
 // Utilise C's adjacent string concatenation to count the number of blocks.
 #define X(...) "."
